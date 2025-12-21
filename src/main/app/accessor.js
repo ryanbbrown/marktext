@@ -5,6 +5,8 @@ import Keybindings from '../keyboard/shortcutHandler'
 import AppMenu from '../menu'
 import { loadMenuCommands } from '../menu/actions'
 import { CommandManager, loadDefaultCommands } from '../commands'
+import DatabaseManager from '../database'
+import { registerDatabaseIpcHandlers } from '../database/ipcHandlers'
 
 class Accessor {
   /**
@@ -18,6 +20,13 @@ class Accessor {
 
     this.preferences = new Preference(this.paths)
     this.dataCenter = new DataCenter(this.paths)
+
+    // Initialize database manager with vault path
+    // Use absolute path to the vault folder in the project
+    const vaultPath = '/Users/ryanbrown/code/marktext/vault'
+    this.databaseManager = new DatabaseManager(userDataPath, vaultPath)
+    this.databaseManager.init()
+    registerDatabaseIpcHandlers(this.databaseManager)
 
     this.commandManager = CommandManager
     this._loadCommands()

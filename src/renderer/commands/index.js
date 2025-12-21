@@ -645,6 +645,29 @@ const commands = [
     execute: async () => {
       ipcRenderer.emit('mt::tabs-cycle-left', null)
     }
+  },
+
+  // --------------------------------------------------------------------------
+  // Database
+
+  {
+    id: 'database.open',
+    execute: async () => {
+      await delay(50)
+      bus.$emit('open-database-view')
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Test
+
+  {
+    id: 'test.table',
+    description: 'Test: Open Table Test Page',
+    execute: async () => {
+      await delay(50)
+      bus.$emit('open-test-table')
+    }
   }
 ]
 

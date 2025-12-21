@@ -165,6 +165,10 @@ export default {
     // module: notification
     dispatch('LISTEN_FOR_NOTIFICATION')
 
+    // Listen for database view navigation
+    bus.$on('open-database-view', this.openDatabaseView)
+    bus.$on('open-test-table', this.openTestTable)
+
     // prevent Chromium's default behavior and try to open the first file
     window.addEventListener('dragover', e => {
       // Cancel to allow tab drag&drop.
@@ -196,6 +200,23 @@ export default {
       addStyles(style)
       this.hideLoadingPage()
     })
+  },
+  beforeDestroy () {
+    bus.$off('open-database-view', this.openDatabaseView)
+    bus.$off('open-test-table', this.openTestTable)
+  },
+  methods: {
+    async openDatabaseView () {
+      // Fetch databases and navigate to the first one
+      await this.$store.dispatch('FETCH_DATABASES')
+      const databases = this.$store.state.database.databases
+      if (databases && databases.length > 0) {
+        this.$router.push({ name: 'database', params: { id: databases[0].id } })
+      }
+    },
+    openTestTable () {
+      this.$router.push({ name: 'test-table' })
+    }
   }
 }
 </script>

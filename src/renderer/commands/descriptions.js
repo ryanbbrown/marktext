@@ -117,7 +117,8 @@ const commandDescriptions = Object.freeze({
   'window.change-theme': 'Theme: Change Theme...',
   'view.text-direction': 'View: Set Text Direction',
   'docs.user-guide': 'MarkText: End User Guide',
-  'docs.markdown-syntax': 'MarkText: Markdown Syntax Guide'
+  'docs.markdown-syntax': 'MarkText: Markdown Syntax Guide',
+  'database.open': 'Database: Open Database View'
 })
 
 export default id => {

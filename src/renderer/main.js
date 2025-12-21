@@ -32,7 +32,12 @@ import {
   TableColumn,
   Tabs,
   TabPane,
-  Input
+  Input,
+  Dropdown,
+  DropdownMenu,
+  DropdownItem,
+  DatePicker,
+  MessageBox
 } from 'element-ui'
 import services from './services'
 import routes from './router'
@@ -85,6 +90,11 @@ Vue.use(TableColumn)
 Vue.use(Tabs)
 Vue.use(TabPane)
 Vue.use(Input)
+Vue.use(Dropdown)
+Vue.use(DropdownMenu)
+Vue.use(DropdownItem)
+Vue.use(DatePicker)
+Vue.prototype.$confirm = MessageBox.confirm
 
 Vue.use(VueRouter)
 
