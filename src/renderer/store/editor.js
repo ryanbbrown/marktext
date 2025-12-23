@@ -35,11 +35,13 @@ const mutations = {
   SET_CURRENT_FILE (state, currentFile) {
     const oldCurrentFile = state.currentFile
     if (!oldCurrentFile.id || oldCurrentFile.id !== currentFile.id) {
-      const { id, markdown, cursor, history, pathname } = currentFile
+      const { id, markdown, cursor, history, pathname, type } = currentFile
       window.DIRNAME = pathname ? path.dirname(pathname) : ''
-      // set state first, then emit file changed event
       state.currentFile = currentFile
-      bus.$emit('file-changed', { id, markdown, cursor, renderCursor: true, history })
+      // Only emit file-changed for non-database tabs
+      if (type !== 'database') {
+        bus.$emit('file-changed', { id, markdown, cursor, renderCursor: true, history })
+      }
     }
   },
   ADD_FILE_TO_TABS (state, currentFile) {
@@ -50,7 +52,8 @@ const mutations = {
     const index = tabs.indexOf(file)
     tabs.splice(index, 1)
 
-    if (file.id && autoSaveTimers.has(file.id)) {
+    // Skip autosave timer cleanup for database tabs
+    if (file.type !== 'database' && file.id && autoSaveTimers.has(file.id)) {
       const timer = autoSaveTimers.get(file.id)
       clearTimeout(timer)
       autoSaveTimers.delete(file.id)
@@ -59,7 +62,8 @@ const mutations = {
     if (file.id === currentFile.id) {
       const fileState = state.tabs[index] || state.tabs[index - 1] || state.tabs[0] || {}
       state.currentFile = fileState
-      if (typeof fileState.markdown === 'string') {
+      // Only emit file-changed for non-database tabs
+      if (fileState.type !== 'database' && typeof fileState.markdown === 'string') {
         const { id, markdown, cursor, history, pathname } = fileState
         window.DIRNAME = pathname ? path.dirname(pathname) : ''
         bus.$emit('file-changed', { id, markdown, cursor, renderCursor: true, history })
@@ -614,6 +618,26 @@ const actions = {
     dispatch('UPDATE_LINE_ENDING_MENU')
   },
 
+  /** Opens a database as a tab, or switches to existing database tab. */
+  OPEN_DATABASE_TAB ({ commit, state, dispatch }, { folderPath, databaseId, filename }) {
+    const { tabs } = state
+    const existingTab = tabs.find(t => t.type === 'database' && t.folderPath === folderPath)
+    if (existingTab) {
+      dispatch('UPDATE_CURRENT_FILE', existingTab)
+      return
+    }
+    const databaseTab = {
+      id: getUniqueId(),
+      type: 'database',
+      folderPath,
+      databaseId,
+      filename: filename || 'Database',
+      isSaved: true
+    }
+    dispatch('UPDATE_CURRENT_FILE', databaseTab)
+    dispatch('SHOW_TAB_VIEW', false)
+  },
+
   // This events are only used during window creation.
   LISTEN_FOR_BOOTSTRAP_WINDOW ({ commit, state, dispatch, rootState }) {
     // Delay load runtime commands and initialize commands.
@@ -852,11 +876,11 @@ const actions = {
       return
     }
 
-    // Replace/close selected untitled empty tab
+    // Replace/close selected untitled empty tab (but not database tabs)
     let keepTabBarState = false
     if (currentFile) {
-      const { isSaved, pathname } = currentFile
-      if (isSaved && !pathname) {
+      const { isSaved, pathname, type } = currentFile
+      if (isSaved && !pathname && type !== 'database') {
         keepTabBarState = true
         dispatch('FORCE_CLOSE_TAB', currentFile)
       }

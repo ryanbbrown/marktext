@@ -9,8 +9,12 @@
         class="tabs-container"
       >
         <li
-          :title="file.pathname"
-          :class="{'active': currentFile.id === file.id, 'unsaved': !file.isSaved }"
+          :title="file.type === 'database' ? file.folderPath : file.pathname"
+          :class="{
+            'active': currentFile.id === file.id,
+            'unsaved': !file.isSaved,
+            'database-tab': file.type === 'database'
+          }"
           v-for="file of tabs"
           :key="file.id"
           :data-id="file.id"
@@ -18,6 +22,9 @@
           @click.middle="closeTab(file.id)"
           @contextmenu.prevent="handleContextMenu($event, file)"
         >
+          <svg v-if="file.type === 'database'" class="icon database-icon" aria-hidden="true">
+            <use xlink:href="#icon-table"></use>
+          </svg>
           <span>{{ file.filename }}</span>
           <svg class="close-icon icon" aria-hidden="true"
             @click.stop="removeFileInTab(file)"
@@ -97,20 +104,25 @@ export default {
     },
     rename (tabId) {
       const tab = this.tabs.find(f => f.id === tabId)
-      if (tab && tab.pathname) {
+      // Skip rename for database tabs
+      if (tab && tab.pathname && tab.type !== 'database') {
         this.$store.dispatch('RENAME_FILE', tab)
       }
     },
     copyPath (tabId) {
       const tab = this.tabs.find(f => f.id === tabId)
-      if (tab && tab.pathname) {
-        clipboard.writeText(tab.pathname)
+      // For database tabs, copy folderPath
+      if (tab) {
+        const path = tab.type === 'database' ? tab.folderPath : tab.pathname
+        if (path) clipboard.writeText(path)
       }
     },
     showInFolder (tabId) {
       const tab = this.tabs.find(f => f.id === tabId)
-      if (tab && tab.pathname) {
-        shell.showItemInFolder(tab.pathname)
+      // For database tabs, show folderPath
+      if (tab) {
+        const path = tab.type === 'database' ? tab.folderPath : tab.pathname
+        if (path) shell.showItemInFolder(path)
       }
     },
     handleContextMenu (event, tab) {
@@ -202,6 +214,14 @@ export default {
 <style scoped>
   svg.close-icon #unsaved-circle-icon {
     fill: var(--themeColor);
+  }
+  svg.database-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    color: var(--themeColor);
+    flex-shrink: 0;
+    opacity: 1 !important;
   }
   .editor-tabs {
     position: relative;

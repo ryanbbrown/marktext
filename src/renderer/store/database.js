@@ -207,16 +207,13 @@ const actions = {
     }
   },
 
-  async CREATE_PROPERTY ({ commit, state, dispatch }, { databaseId, name, type, config, insertIndex }) {
+  async CREATE_PROPERTY ({ commit }, { databaseId, name, type, config, insertIndex }) {
     try {
-      const result = await ipcRenderer.invoke('mt::database-create-property', databaseId, name, type, config)
+      const result = await ipcRenderer.invoke('mt::database-create-property', databaseId, name, type, config, insertIndex)
       if (result.success) {
-        commit('ADD_PROPERTY', result.data)
-        // Add to column order at specified position
-        const columnOrder = [...(state.currentDatabase?.columnOrder || ['title', 'createdAt', 'updatedAt'])]
-        const newIndex = insertIndex != null ? insertIndex : columnOrder.length
-        columnOrder.splice(newIndex, 0, result.data.id)
-        await dispatch('UPDATE_COLUMN_ORDER', columnOrder)
+        // Backend returns { property, columnOrder } atomically
+        commit('ADD_PROPERTY', result.data.property)
+        commit('SET_COLUMN_ORDER', result.data.columnOrder)
       }
       return result
     } catch (err) {
@@ -238,14 +235,13 @@ const actions = {
     }
   },
 
-  async DELETE_PROPERTY ({ commit, state, dispatch }, propertyId) {
+  async DELETE_PROPERTY ({ commit }, propertyId) {
     try {
       const result = await ipcRenderer.invoke('mt::database-delete-property', propertyId)
       if (result.success) {
+        // Backend returns { columnOrder } atomically
         commit('REMOVE_PROPERTY', propertyId)
-        // Remove from column order
-        const columnOrder = (state.currentDatabase?.columnOrder || []).filter(id => id !== propertyId)
-        await dispatch('UPDATE_COLUMN_ORDER', columnOrder)
+        commit('SET_COLUMN_ORDER', result.data.columnOrder)
       }
       return result.success
     } catch (err) {

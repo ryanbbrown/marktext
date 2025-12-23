@@ -14,18 +14,20 @@
         :is-saved="isSaved"
       ></title-bar>
       <div class="editor-placeholder" v-if="!init"></div>
-      <recent
-        v-if="!hasCurrentFile && init"
-      ></recent>
-      <editor-with-tabs
-        v-if="hasCurrentFile && init"
-        :markdown="markdown"
-        :cursor="cursor"
-        :source-code="sourceCode"
-        :show-tab-bar="showTabBar"
-        :text-direction="textDirection"
-        :platform="platform"
-      ></editor-with-tabs>
+      <template v-else-if="init">
+        <recent v-if="!hasCurrentFile" />
+        <editor-with-tabs
+          v-if="hasCurrentFile"
+          :markdown="markdown"
+          :cursor="cursor"
+          :source-code="sourceCode"
+          :show-tab-bar="showTabBar"
+          :text-direction="textDirection"
+          :platform="platform"
+          :is-database-tab="isDatabaseTab"
+          :database-folder-path="currentDatabaseFolderPath"
+        ></editor-with-tabs>
+      </template>
       <command-palette></command-palette>
       <about-dialog></about-dialog>
       <export-setting-dialog></export-setting-dialog>
@@ -95,8 +97,17 @@ export default {
     ...mapState([
       'windowActive', 'platform', 'init'
     ]),
+    ...mapState({
+      currentFile: state => state.editor.currentFile
+    }),
     hasCurrentFile () {
-      return this.markdown !== undefined
+      return this.markdown !== undefined || this.isDatabaseTab
+    },
+    isDatabaseTab () {
+      return this.currentFile?.type === 'database'
+    },
+    currentDatabaseFolderPath () {
+      return this.isDatabaseTab ? this.currentFile.folderPath : null
     }
   },
   watch: {
@@ -165,10 +176,6 @@ export default {
     // module: notification
     dispatch('LISTEN_FOR_NOTIFICATION')
 
-    // Listen for database view navigation
-    bus.$on('open-database-view', this.openDatabaseView)
-    bus.$on('open-test-table', this.openTestTable)
-
     // prevent Chromium's default behavior and try to open the first file
     window.addEventListener('dragover', e => {
       // Cancel to allow tab drag&drop.
@@ -201,23 +208,7 @@ export default {
       this.hideLoadingPage()
     })
   },
-  beforeDestroy () {
-    bus.$off('open-database-view', this.openDatabaseView)
-    bus.$off('open-test-table', this.openTestTable)
-  },
-  methods: {
-    async openDatabaseView () {
-      // Fetch databases and navigate to the first one
-      await this.$store.dispatch('FETCH_DATABASES')
-      const databases = this.$store.state.database.databases
-      if (databases && databases.length > 0) {
-        this.$router.push({ name: 'database', params: { id: databases[0].id } })
-      }
-    },
-    openTestTable () {
-      this.$router.push({ name: 'test-table' })
-    }
-  }
+  methods: {}
 }
 </script>
 

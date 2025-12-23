@@ -1,24 +1,16 @@
 <template>
-  <div class="database-view">
+  <div class="database-inline-view">
     <div class="database-header">
       <div class="database-title">
         <h1 v-if="currentDatabase">{{ currentDatabase.name }}</h1>
         <h1 v-else>Loading...</h1>
       </div>
-      <div class="database-actions">
-        <el-button
-          size="small"
-          @click="goBack"
-        >
-          Back to Editor
-        </el-button>
-      </div>
     </div>
 
     <div class="database-content">
       <database-table-adapter
-        v-if="pages.length > 0 || properties.length > 0"
-        :database-id="$route.params.id"
+        v-if="databaseId && (pages.length > 0 || properties.length > 0)"
+        :database-id="databaseId"
         @open-page="handleOpenPage"
       />
       <div v-else-if="loading" class="loading-state">
@@ -33,14 +25,27 @@
 </template>
 
 <script>
-import { ipcRenderer } from 'electron'
 import { mapState, mapActions } from 'vuex'
-import DatabaseTableAdapter from '@/components/database/DatabaseTableAdapter'
+import DatabaseTableAdapter from './DatabaseTableAdapter'
 
+/** Inline database view displayed in main content area */
 export default {
-  name: 'Database',
+  name: 'DatabaseInlineView',
   components: {
     DatabaseTableAdapter
+  },
+
+  props: {
+    folderPath: {
+      type: String,
+      required: true
+    }
+  },
+
+  data () {
+    return {
+      databaseId: null
+    }
   },
 
   computed: {
@@ -49,16 +54,17 @@ export default {
       pages: state => state.database.pages,
       properties: state => state.database.properties,
       loading: state => state.database.loading,
-      error: state => state.database.error
+      error: state => state.database.error,
+      databases: state => state.database.databases
     })
   },
 
   watch: {
-    '$route.params.id': {
+    folderPath: {
       immediate: true,
-      handler (newId) {
-        if (newId) {
-          this.loadDatabase(newId)
+      async handler (newPath) {
+        if (newPath) {
+          await this.loadDatabaseForFolder(newPath)
         }
       }
     }
@@ -66,36 +72,43 @@ export default {
 
   methods: {
     ...mapActions([
+      'FETCH_DATABASES',
       'FETCH_DATABASE',
       'FETCH_PAGES',
       'FETCH_PROPERTIES'
     ]),
 
-    async loadDatabase (databaseId) {
-      await this.FETCH_DATABASE(databaseId)
-      await Promise.all([
-        this.FETCH_PAGES(databaseId),
-        this.FETCH_PROPERTIES(databaseId)
-      ])
+    async loadDatabaseForFolder (folderPath) {
+      console.log('[DB View] Loading database for folder:', folderPath)
+      await this.FETCH_DATABASES()
+      console.log('[DB View] All databases:', this.databases)
+      const db = this.databases.find(d => d.folderPath === folderPath)
+      console.log('[DB View] Found db:', db)
+      if (db) {
+        this.databaseId = db.id
+        await this.FETCH_DATABASE(db.id)
+        await Promise.all([
+          this.FETCH_PAGES(db.id),
+          this.FETCH_PROPERTIES(db.id)
+        ])
+        console.log('[DB View] Loaded pages:', this.pages, 'properties:', this.properties)
+      } else {
+        console.log('[DB View] No database found for folder path')
+      }
     },
 
     handleOpenPage (page) {
-      ipcRenderer.send('mt::open-file', page.filePath, {})
-      this.$router.push('/editor')
-    },
-
-    goBack () {
-      this.$router.push('/editor')
+      this.$emit('open-page', page)
     }
   }
 }
 </script>
 
 <style scoped>
-.database-view {
+.database-inline-view {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: var(--editorBgColor);
   color: var(--editorColor);
 }
@@ -105,10 +118,9 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  padding-left: 80px; /* Space for Mac traffic light buttons */
   border-bottom: 1px solid var(--floatBorderColor);
   background: var(--floatBgColor);
-  -webkit-app-region: drag;
+  flex-shrink: 0;
 }
 
 .database-header .database-title h1 {
@@ -117,14 +129,9 @@ export default {
   font-weight: 600;
 }
 
-.database-header .database-actions {
-  -webkit-app-region: no-drag;
-}
-
 .database-content {
   flex: 1;
   padding: 24px;
-  padding-right: 24px;
   overflow: auto;
   box-sizing: border-box;
 }

@@ -11,8 +11,8 @@ import { getValueColumn, isValidPropertyType } from './propertyTypes'
  */
 class DatabaseManager {
   constructor (userDataPath, vaultPath = null) {
-    // Store the database in the vault folder for simplicity
-    this.dbPath = vaultPath ? path.join(vaultPath, 'database.sqlite') : path.join(userDataPath, 'databases.sqlite')
+    // Store the database in a subfolder to keep vault root clean
+    this.dbPath = vaultPath ? path.join(vaultPath, 'database', 'database.sqlite') : path.join(userDataPath, 'databases.sqlite')
     this.vaultPath = vaultPath
     this.db = null
   }
@@ -22,6 +22,11 @@ class DatabaseManager {
    */
   init () {
     try {
+      // Ensure database directory exists
+      const dbDir = path.dirname(this.dbPath)
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true })
+      }
       this.db = new Database(this.dbPath)
       this.db.pragma('journal_mode = WAL')
       this.db.pragma('foreign_keys = ON')
@@ -31,7 +36,8 @@ class DatabaseManager {
 
       // Seed demo data if vault path is provided
       if (this.vaultPath) {
-        seedDemoData(this.db, this.vaultPath)
+        const dbFolderPath = path.dirname(this.dbPath)
+        seedDemoData(this.db, this.vaultPath, dbFolderPath)
       }
 
       console.log('DatabaseManager initialized successfully')
@@ -175,7 +181,7 @@ class DatabaseManager {
   }
 
   /**
-   * Create a new page with a markdown file
+   * Create a new page with a markdown file (atomic - cleans up file if DB fails)
    * @param {string} databaseId - Database ID
    * @param {string} title - Page title
    * @returns {Object} The created page record
@@ -191,30 +197,44 @@ class DatabaseManager {
     const sanitizedTitle = title.replace(/[<>:"/\\|?*]/g, '_')
     const filePath = path.join(database.folderPath, `${sanitizedTitle}.md`)
 
-    // Create the markdown file
+    // Create the markdown file first
     fs.writeFileSync(filePath, `# ${title}\n`, 'utf-8')
 
-    // Get max position
-    const maxPos = this.db.prepare(
-      'SELECT COALESCE(MAX(position), -1) as maxPos FROM pages WHERE database_id = ?'
-    ).get(databaseId).maxPos
+    try {
+      // Get max position and insert page record in transaction
+      const insertPage = this.db.transaction(() => {
+        const maxPos = this.db.prepare(
+          'SELECT COALESCE(MAX(position), -1) as maxPos FROM pages WHERE database_id = ?'
+        ).get(databaseId).maxPos
 
-    // Insert page record
-    const stmt = this.db.prepare(`
-      INSERT INTO pages (id, database_id, file_path, title, position, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `)
-    stmt.run(id, databaseId, filePath, title, maxPos + 1, now, now)
+        this.db.prepare(`
+          INSERT INTO pages (id, database_id, file_path, title, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(id, databaseId, filePath, title, maxPos + 1, now, now)
 
-    return {
-      id,
-      databaseId,
-      filePath,
-      title,
-      position: maxPos + 1,
-      createdAt: now,
-      updatedAt: now,
-      properties: {}
+        return maxPos + 1
+      })
+
+      const position = insertPage()
+
+      return {
+        id,
+        databaseId,
+        filePath,
+        title,
+        position,
+        createdAt: now,
+        updatedAt: now,
+        properties: {}
+      }
+    } catch (err) {
+      // DB insert failed - clean up the file we created
+      try {
+        fs.unlinkSync(filePath)
+      } catch (unlinkErr) {
+        console.error('Failed to clean up orphan file:', unlinkErr)
+      }
+      throw err
     }
   }
 
@@ -332,14 +352,15 @@ class DatabaseManager {
   }
 
   /**
-   * Create a new property
+   * Create a new property and add it to column_order atomically
    * @param {string} databaseId - Database ID
    * @param {string} name - Property name
    * @param {string} type - Property type (text, number, select, date, checkbox)
    * @param {Object} config - Type-specific configuration
-   * @returns {Object} The created property
+   * @param {number|null} insertIndex - Position in column_order to insert (null = end)
+   * @returns {Object} The created property and updated column order
    */
-  createProperty (databaseId, name, type, config = null) {
+  createProperty (databaseId, name, type, config = null, insertIndex = null) {
     if (!isValidPropertyType(type)) {
       throw new Error(`Invalid property type: ${type}`)
     }
@@ -347,19 +368,37 @@ class DatabaseManager {
     const id = uuidv4()
     const now = Date.now()
 
-    const stmt = this.db.prepare(`
-      INSERT INTO properties (id, database_id, name, type, config, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    stmt.run(id, databaseId, name, type, config ? JSON.stringify(config) : null, now)
+    const createPropertyTx = this.db.transaction(() => {
+      // Insert the property
+      this.db.prepare(`
+        INSERT INTO properties (id, database_id, name, type, config, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, databaseId, name, type, config ? JSON.stringify(config) : null, now)
+
+      // Update column_order
+      const db = this.getDatabase(databaseId)
+      const columnOrder = [...(db.columnOrder || ['title', 'createdAt', 'updatedAt'])]
+      const idx = insertIndex != null ? insertIndex : columnOrder.length
+      columnOrder.splice(idx, 0, id)
+
+      this.db.prepare('UPDATE databases SET column_order = ? WHERE id = ?')
+        .run(JSON.stringify(columnOrder), databaseId)
+
+      return columnOrder
+    })
+
+    const columnOrder = createPropertyTx()
 
     return {
-      id,
-      databaseId,
-      name,
-      type,
-      config,
-      createdAt: now
+      property: {
+        id,
+        databaseId,
+        name,
+        type,
+        config,
+        createdAt: now
+      },
+      columnOrder
     }
   }
 
@@ -398,14 +437,39 @@ class DatabaseManager {
   }
 
   /**
-   * Delete a property (cascades to page_properties)
+   * Delete a property and remove it from column_order atomically
    * @param {string} propertyId - Property ID
-   * @returns {boolean} Success status
+   * @returns {Object} Result with success status and updated column order
    */
   deleteProperty (propertyId) {
-    const stmt = this.db.prepare('DELETE FROM properties WHERE id = ?')
-    const result = stmt.run(propertyId)
-    return result.changes > 0
+    // Get the database ID for this property first
+    const prop = this.db.prepare('SELECT database_id FROM properties WHERE id = ?').get(propertyId)
+    if (!prop) {
+      return { success: false, columnOrder: null }
+    }
+
+    const deletePropertyTx = this.db.transaction(() => {
+      // Delete the property (cascades to page_properties)
+      const result = this.db.prepare('DELETE FROM properties WHERE id = ?').run(propertyId)
+      if (result.changes === 0) {
+        return null
+      }
+
+      // Update column_order to remove this property
+      const db = this.getDatabase(prop.database_id)
+      const columnOrder = (db.columnOrder || []).filter(id => id !== propertyId)
+
+      this.db.prepare('UPDATE databases SET column_order = ? WHERE id = ?')
+        .run(JSON.stringify(columnOrder), prop.database_id)
+
+      return columnOrder
+    })
+
+    const columnOrder = deletePropertyTx()
+    return {
+      success: columnOrder !== null,
+      columnOrder
+    }
   }
 
   // ==================== Page Property Operations ====================

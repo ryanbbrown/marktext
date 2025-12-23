@@ -521,10 +521,6 @@ export default {
 
 <!-- Scoped styles for component-specific elements -->
 <style scoped>
-.notion-table {
-  overflow-x: auto;
-}
-
 .row-title {
   color: var(--themeColor);
   font-weight: 500;
@@ -575,6 +571,11 @@ export default {
 
 <!-- Global styles to hide el-table default sort/filter icons and fix header cell sizing -->
 <style>
+/* Make table only as wide as its columns */
+.notion-table .el-table {
+  width: fit-content;
+}
+
 .notion-table .el-table thead .caret-wrapper {
   display: none !important;
 }
@@ -620,16 +621,6 @@ export default {
 
 .notion-table .el-table__body {
   table-layout: fixed;
-}
-
-/* Ensure table doesn't auto-fit to container width */
-.notion-table .el-table {
-  width: fit-content !important;
-}
-
-.notion-table .el-table__header-wrapper,
-.notion-table .el-table__body-wrapper {
-  width: fit-content;
 }
 
 /* Row styling - grab cursor to indicate draggable */

@@ -1,5 +1,14 @@
 <template>
+  <!-- Render database node if this folder contains database.sqlite -->
+  <tree-database
+    v-if="isDatabaseFolder"
+    :folder="folder"
+    :depth="depth"
+    :database-info="databaseInfo"
+  />
+  <!-- Otherwise render normal folder -->
   <div
+    v-else
     class="side-bar-folder"
   >
     <div
@@ -54,6 +63,7 @@ import { mapState } from 'vuex'
 import { showContextMenu } from '../../contextMenu/sideBar'
 import bus from '../../bus'
 import { createFileOrDirectoryMixins } from '../../mixins'
+import TreeDatabase from './treeDatabase.vue'
 
 export default {
   mixins: [createFileOrDirectoryMixins],
@@ -75,15 +85,27 @@ export default {
     }
   },
   components: {
-    File: () => import('./treeFile.vue')
+    File: () => import('./treeFile.vue'),
+    TreeDatabase
   },
   computed: {
     ...mapState({
       renameCache: state => state.project.renameCache,
       createCache: state => state.project.createCache,
       activeItem: state => state.project.activeItem,
-      clipboard: state => state.project.clipboard
-    })
+      clipboard: state => state.project.clipboard,
+      detectedDatabases: state => state.project.detectedDatabases
+    }),
+    isDatabaseFolder () {
+      const isDb = !!this.detectedDatabases[this.folder.pathname]
+      if (Object.keys(this.detectedDatabases).length > 0) {
+        console.log('[DB] Checking folder:', this.folder.pathname, 'isDb:', isDb, 'detected:', Object.keys(this.detectedDatabases))
+      }
+      return isDb
+    },
+    databaseInfo () {
+      return this.detectedDatabases[this.folder.pathname] || null
+    }
   },
   created () {
     this.$nextTick(() => {

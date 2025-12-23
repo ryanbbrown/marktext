@@ -6,9 +6,10 @@
       ref="textCell"
       class="text-cell"
       contenteditable="true"
+      @focus="isTextFocused = true"
       @blur="saveText"
       @keydown.enter.prevent="$refs.textCell.blur()"
-    >{{ localValue }}</div>
+    />
 
     <!-- Number type -->
     <el-input-number
@@ -73,7 +74,15 @@ export default {
 
   data () {
     return {
-      localValue: this.value
+      localValue: this.value,
+      isTextFocused: false
+    }
+  },
+
+  mounted () {
+    // Set initial text content for contenteditable
+    if (this.column.type === 'text' && this.$refs.textCell) {
+      this.$refs.textCell.textContent = this.value || ''
     }
   },
 
@@ -102,6 +111,10 @@ export default {
   watch: {
     value (newVal) {
       this.localValue = newVal
+      // Update DOM directly for text cells, but only when not focused
+      if (this.column.type === 'text' && !this.isTextFocused && this.$refs.textCell) {
+        this.$refs.textCell.textContent = newVal || ''
+      }
     }
   },
 
@@ -112,6 +125,7 @@ export default {
       }
     },
     saveText (e) {
+      this.isTextFocused = false
       const newValue = e.target.innerText.trim()
       if (newValue !== this.value) {
         this.localValue = newValue

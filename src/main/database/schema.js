@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_page_properties_property_id ON page_properties(pr
  * @param {Database} db - The better-sqlite3 database instance
  * @param {string} vaultPath - Path to the vault folder containing markdown files
  */
-export const seedDemoData = (db, vaultPath) => {
+export const seedDemoData = (db, vaultPath, dbFolderPath) => {
   // Check if we already have data
   const existingDatabases = db.prepare('SELECT COUNT(*) as count FROM databases').get()
   if (existingDatabases.count > 0) {
@@ -73,12 +73,13 @@ export const seedDemoData = (db, vaultPath) => {
   const databaseId = uuidv4()
 
   // Create a demo database entry with default column order
+  // folder_path is the database directory (for lookup), but files are in vaultPath
   const defaultColumnOrder = JSON.stringify(['title', 'createdAt', 'updatedAt'])
   const insertDatabase = db.prepare(`
     INSERT INTO databases (id, name, folder_path, column_order, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `)
-  insertDatabase.run(databaseId, 'My Notes', vaultPath, defaultColumnOrder, now, now)
+  insertDatabase.run(databaseId, 'My Notes', dbFolderPath, defaultColumnOrder, now, now)
 
   // Find all markdown files in the vault
   const files = fs.readdirSync(vaultPath).filter(f => f.endsWith('.md'))

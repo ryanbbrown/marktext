@@ -15,7 +15,8 @@ const state = {
   newFileNameCache: '',
   renameCache: null,
   clipboard: null,
-  projectTree: null
+  projectTree: null,
+  detectedDatabases: {}
 }
 
 const getters = {}
@@ -70,12 +71,15 @@ const mutations = {
   },
   SET_RENAME_CACHE (state, cache) {
     state.renameCache = cache
+  },
+  SET_DETECTED_DATABASES (state, databases) {
+    state.detectedDatabases = databases
   }
 }
 
 const actions = {
   LISTEN_FOR_LOAD_PROJECT ({ commit, dispatch }) {
-    ipcRenderer.on('mt::open-directory', (e, pathname) => {
+    ipcRenderer.on('mt::open-directory', async (e, pathname) => {
       commit('SET_ROOT_DIRECTORY', pathname)
       commit('SET_LAYOUT', {
         rightColumn: 'files',
@@ -83,6 +87,12 @@ const actions = {
         showTabBar: true
       })
       dispatch('DISPATCH_LAYOUT_MENU_ITEMS')
+
+      // Scan for databases in the project
+      const result = await ipcRenderer.invoke('mt::scan-project-databases', pathname)
+      if (result.success) {
+        commit('SET_DETECTED_DATABASES', result.data)
+      }
     })
   },
   LISTEN_FOR_UPDATE_PROJECT ({ commit, state, dispatch }) {

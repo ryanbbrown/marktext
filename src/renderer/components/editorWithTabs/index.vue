@@ -5,41 +5,48 @@
     >
       <tabs v-show="showTabBar"></tabs>
       <div class="container">
-        <editor
-          :markdown="markdown"
-          :cursor="cursor"
-          :text-direction="textDirection"
-          :platform="platform"
-        ></editor>
-        <source-code
-          v-if="sourceCode"
-          :markdown="markdown"
-          :cursor="cursor"
-          :text-direction="textDirection"
-        ></source-code>
+        <database-inline-view
+          v-if="isDatabaseTab"
+          :folder-path="databaseFolderPath"
+          @open-page="handleOpenPage"
+        />
+        <template v-else>
+          <editor
+            :markdown="markdown"
+            :cursor="cursor"
+            :text-direction="textDirection"
+            :platform="platform"
+          ></editor>
+          <source-code
+            v-if="sourceCode"
+            :markdown="markdown"
+            :cursor="cursor"
+            :text-direction="textDirection"
+          ></source-code>
+        </template>
       </div>
-      <tab-notifications></tab-notifications>
+      <tab-notifications v-if="!isDatabaseTab"></tab-notifications>
     </div>
 </template>
 
 <script>
+import { ipcRenderer } from 'electron'
 import { mapState } from 'vuex'
 import Tabs from './tabs.vue'
 import Editor from './editor.vue'
 import SourceCode from './sourceCode.vue'
 import TabNotifications from './notifications.vue'
+import DatabaseInlineView from '../database/DatabaseInlineView.vue'
 
 export default {
   props: {
     markdown: {
-      type: String,
-      required: true
+      type: String
     },
     cursor: {
       validator (value) {
         return typeof value === 'object'
-      },
-      required: true
+      }
     },
     sourceCode: {
       type: Boolean,
@@ -56,19 +63,34 @@ export default {
     platform: {
       type: String,
       required: true
+    },
+    isDatabaseTab: {
+      type: Boolean,
+      default: false
+    },
+    databaseFolderPath: {
+      type: String,
+      default: null
     }
   },
   components: {
     Tabs,
     Editor,
     SourceCode,
-    TabNotifications
+    TabNotifications,
+    DatabaseInlineView
   },
   computed: {
     ...mapState({
       showSideBar: state => state.layout.showSideBar,
       sideBarWidth: state => state.layout.sideBarWidth
     })
+  },
+  methods: {
+    /** Handle opening a page from the database view. */
+    handleOpenPage (page) {
+      ipcRenderer.send('mt::open-file', page.filePath, {})
+    }
   }
 }
 </script>

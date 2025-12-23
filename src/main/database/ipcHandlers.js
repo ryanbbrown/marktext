@@ -1,10 +1,53 @@
+import path from 'path'
+import fs from 'fs'
 import { ipcMain } from 'electron'
+
+/** Recursively scan a directory for database.sqlite files */
+const scanForDatabases = (rootPath, maxDepth = 5) => {
+  const databases = {}
+  const scan = (dirPath, depth) => {
+    if (depth > maxDepth) return
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue
+        const fullPath = path.join(dirPath, entry.name)
+        if (entry.isDirectory()) {
+          scan(fullPath, depth + 1)
+        } else if (entry.name === 'database.sqlite') {
+          const folderPath = dirPath
+          databases[folderPath] = {
+            path: fullPath,
+            folderPath,
+            name: path.basename(folderPath)
+          }
+        }
+      }
+    } catch (err) {
+      // Ignore permission errors
+    }
+  }
+  scan(rootPath, 0)
+  return databases
+}
 
 /**
  * Register IPC handlers for database operations
  * @param {DatabaseManager} databaseManager - The database manager instance
  */
 export const registerDatabaseIpcHandlers = (databaseManager) => {
+  // Scan project for database.sqlite files
+  ipcMain.handle('mt::scan-project-databases', async (event, projectPath) => {
+    try {
+      console.log('[DB Main] Scanning for databases in:', projectPath)
+      const databases = scanForDatabases(projectPath)
+      console.log('[DB Main] Found databases:', databases)
+      return { success: true, data: databases }
+    } catch (err) {
+      console.error('Error scanning for databases:', err)
+      return { success: false, error: err.message }
+    }
+  })
   // Get all databases
   ipcMain.handle('mt::database-get-all', async () => {
     try {
@@ -152,11 +195,11 @@ export const registerDatabaseIpcHandlers = (databaseManager) => {
     }
   })
 
-  // Create a new property
-  ipcMain.handle('mt::database-create-property', async (event, databaseId, name, type, config) => {
+  // Create a new property (atomic: also updates column_order)
+  ipcMain.handle('mt::database-create-property', async (event, databaseId, name, type, config, insertIndex) => {
     try {
-      const property = databaseManager.createProperty(databaseId, name, type, config)
-      return { success: true, data: property }
+      const result = databaseManager.createProperty(databaseId, name, type, config, insertIndex)
+      return { success: true, data: result }
     } catch (err) {
       console.error('Error creating property:', err)
       return { success: false, error: err.message }
@@ -177,14 +220,14 @@ export const registerDatabaseIpcHandlers = (databaseManager) => {
     }
   })
 
-  // Delete a property
+  // Delete a property (atomic: also updates column_order)
   ipcMain.handle('mt::database-delete-property', async (event, propertyId) => {
     try {
-      const success = databaseManager.deleteProperty(propertyId)
-      if (!success) {
+      const result = databaseManager.deleteProperty(propertyId)
+      if (!result.success) {
         return { success: false, error: 'Failed to delete property' }
       }
-      return { success: true }
+      return { success: true, data: { columnOrder: result.columnOrder } }
     } catch (err) {
       console.error('Error deleting property:', err)
       return { success: false, error: err.message }

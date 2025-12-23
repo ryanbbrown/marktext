@@ -127,6 +127,13 @@ body {
   bottom: 0;
 }
 
+/* Fix for horizontal scrolling in flex containers.
+   Flex items have min-width: auto by default, which prevents them from
+   shrinking below their content size. This breaks overflow: scroll/auto. */
+.editor-middle {
+  min-width: 0;
+}
+
 .icon {
   width: 1em; height: 1em;
   vertical-align: -0.15em;

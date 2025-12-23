@@ -1,6 +1,5 @@
 import App from '@/pages/app'
 import Preference from '@/pages/preference'
-import Database from '@/pages/database'
 import General from '@/prefComponents/general'
 import Editor from '@/prefComponents/editor'
 import Markdown from '@/prefComponents/markdown'
@@ -21,8 +20,6 @@ const routes = type => ([{
   path: '/', redirect: type === 'editor' ? '/editor' : parseSettingsPage(type)
 }, {
   path: '/editor', component: App
-}, {
-  path: '/database/:id', component: Database, name: 'database'
 }, {
   path: '/preference',
   component: Preference,
